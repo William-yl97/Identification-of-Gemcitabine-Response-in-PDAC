@@ -1,0 +1,49 @@
+### Import libaries 
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import warnings
+warnings.filterwarnings("ignore")
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+from sklearn import preprocessing
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import f1_score
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import recall_score 
+from sklearn.metrics import precision_score  
+from sklearn.metrics import roc_auc_score 
+from sklearn.metrics import roc_curve 
+from sklearn.metrics import classification_report
+from sklearn import metrics
+%matplotlib inline
+sns.set_context('notebook') 
+
+
+#### Load Dataset
+data = pd.read_csv("900 amp and del from fisher exact.csv")
+print(data.shape)
+seed = 0
+all_columns=data.iloc[:,:]
+
+
+### Construct Correlation Matrix
+# Create correlation matrix
+corr_matrix = all_columns.corr().abs()
+pd.set_option('display.max_rows', 500)
+pd.set_option('display.max_columns', 500)
+
+# Find index of feature columns with correlation greater than 0.25 to Gemcitabine
+
+corr_matrix = corr_matrix[corr_matrix["Gemcitabine Response"] >= 0.27]
+# print(corr_matrix.shape)
+# print(corr_matrix.index)
+corr_matrix.head()
+
+pd.set_option('display.max_rows', 500)
+pd.set_option('display.max_columns', 500)
+pd.DataFrame(corr_matrix)
+listallcols=list(corr_matrix.columns)
