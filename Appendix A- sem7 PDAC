@@ -1,0 +1,436 @@
+### Import libaries 
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import warnings
+warnings.filterwarnings("ignore")
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+from sklearn import preprocessing
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import f1_score
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import recall_score 
+from sklearn.metrics import precision_score  
+from sklearn.metrics import roc_auc_score 
+from sklearn.metrics import roc_curve 
+from sklearn.metrics import classification_report
+from sklearn import metrics
+%matplotlib inline
+sns.set_context('notebook') 
+
+
+#### Load Dataset
+data = pd.read_csv("900 amp and del from fisher exact.csv")
+print(data.shape)
+seed = 0
+all_columns=data.iloc[:,:]
+
+
+### Construct Correlation Matrix
+# Create correlation matrix
+corr_matrix = all_columns.corr().abs()
+pd.set_option('display.max_rows', 500)
+pd.set_option('display.max_columns', 500)
+
+# Find index of feature columns with correlation greater than 0.25 to Gemcitabine
+
+corr_matrix = corr_matrix[corr_matrix["Gemcitabine Response"] >= 0.27]
+# print(corr_matrix.shape)
+# print(corr_matrix.index)
+corr_matrix.head()
+
+pd.set_option('display.max_rows', 500)
+pd.set_option('display.max_columns', 500)
+pd.DataFrame(corr_matrix)
+listallcols=list(corr_matrix.columns)
+colstokeep=list(corr_matrix.index)
+colstodrop=set(listallcols)-set(colstokeep)
+colstodrop=list(colstodrop)
+df_corr_matrix_final=corr_matrix[colstokeep]
+print(df_corr_matrix_final.shape)
+top = df_corr_matrix_final.columns
+data[top]
+
+
+### Exploratory Data Analysis
+# Insepction of features' skewness
+from scipy.stats import skew
+
+transform= data[top[1:]]
+
+for i in transform:
+    print('Skewness of {0} is :{1}'.format(i, skew(df_corr_matrix_final[i])))
+
+transform.shape
+
+## K-Means CLsutering
+from kneed import KneeLocator
+from sklearn.cluster import KMeans, MiniBatchKMeans
+import matplotlib.colors as colours
+from itertools import cycle
+from IPython.display import display
+
+df_analysis = pd.read_csv("900 amp and del from fisher exact.csv")
+var_response = "Gemcitabine Response"
+listfeatures = list(df_analysis.columns)
+listfeatures.remove(var_response)
+df_analysis[var_response] = df_analysis[var_response].astype(int)
+df_analysis.head()
+
+seed = 0
+X = df_analysis[listfeatures].values
+print(X.shape)
+
+y = df_analysis[var_response].values
+print(y.shape)
+
+# use optimum data representation for clustering
+X_train,X_val,y_train,y_val = train_test_split(X, y,train_size=0.8, random_state=seed,stratify=y)
+
+sumofsquareddistances = []
+K = range(2,30)
+for k in K:
+    km = KMeans(n_clusters=k)
+    km = km.fit(X_train)
+    sumofsquareddistances.append(km.inertia_)
+    
+kn = KneeLocator(K, sumofsquareddistances, curve='convex', direction='decreasing')
+optimumclusters = kn.knee
+print(optimumclusters)
+
+plt.xlabel('number of clusters k')
+plt.ylabel('sum of squared distances')
+plt.title('Elbow Method For Optimal k')
+plt.plot(K, sumofsquareddistances, 'bx-')
+plt.vlines(kn.knee, plt.ylim()[0], plt.ylim()[1], linestyles='dashed')
+plt.show();
+
+clustermodel = MiniBatchKMeans(init="k-means++", n_clusters=optimumclusters, batch_size=optimumclusters, max_no_improvement=10, verbose=0)
+clustermodel
+
+clustermodel.fit(X)
+predlabels = clustermodel.labels_
+
+centroids = clustermodel.cluster_centers_
+colors_ = cycle(colours.cnames.keys())
+
+currmodelname = "MiniBatch Kmeans"
+fig = plt.figure(figsize=(6,6))
+fig.subplots_adjust(left=0.04)
+ax = fig.add_subplot(1, 1, 1)
+for this_centroid, k, col in zip(centroids, range(optimumclusters), colors_):
+    mask = predlabels == k
+    ax.scatter(X[mask,0], X[mask,1], c='w', edgecolor=col, marker='.', alpha=0.5)
+    ax.scatter(this_centroid[0], this_centroid[1], marker='+', c='k', s=25)
+ax.set_autoscaley_on(False)
+ax.set_title("{} ({} clusters)".format("MiniBatch Kmeans", optimumclusters))
+plt.show();
+
+
+#### Train Test Split
+from sklearn.model_selection import train_test_split
+
+# try to use only important quantitative columns + binary columns
+## define x_topf and y_topf
+X= data[top].iloc[:,1:].values
+print(type(X))
+print(X.shape)
+
+y = data[top].iloc[:,0].values
+print(type(y))
+print(y)
+
+
+# create x_train and y_label
+X_train,X_val,y_train,y_val = train_test_split(X, y,train_size=0.8, random_state=0,stratify=y)
+
+
+print(X_train.shape)
+print(X_val.shape)
+print(y_train.shape)
+print(y_val.shape)
+
+
+### Building Machine Learning Models
+
+# 1. KNN 
+from sklearn.model_selection import cross_val_score
+from sklearn import neighbors
+
+# use cross validation to find the best K
+cv_scores = []
+k_vals = []
+ 
+for k in range(2, 17, 2):
+    
+    model = neighbors.KNeighborsClassifier(n_neighbors=k)
+    
+    scores = cross_val_score(model, X_train, y_train, cv=10, scoring='accuracy')
+    score = scores.mean()
+    
+    print("k={0}, cv_score={1:.2f}".format(k, score * 100))
+    
+    cv_scores.append(score)
+    k_vals.append(k)
+    
+# find best k
+idx = np.argmax(cv_scores)
+print("k={0} achieved highest accuracy of {1:.2f}".format(k_vals[idx], cv_scores[idx] * 100))
+
+fig2, ax= plt.subplots(figsize=(7,5))
+ax.plot(k_vals, cv_scores, color='#1F77B4')
+ax.set_xlabel('K')
+ax.set_ylabel('Accuracy Score')
+ax.set_title('Choose K by cross validation', fontsize=13)
+plt.legend()
+plt.show()
+
+from sklearn.model_selection import cross_val_score
+from sklearn import neighbors
+best_model_knn = neighbors.KNeighborsClassifier(n_neighbors = k_vals[idx])
+best_model_knn.fit(X_train, y_train)
+
+y_prob_knn= best_model_knn.predict_proba(X_val)
+y_pred_knn= (y_prob_knn[:,1]>threshold).astype(int)
+
+print( confusion_matrix(y_val, y_pred_knn) )
+
+print(recall_score(y_val, y_pred_knn).round(3))
+print(precision_score(y_val, y_pred_knn).round(3))
+
+print(classification_report(y_val, y_pred_knn))
+
+auc_knn=roc_auc_score(y_val, y_prob_knn[:,1]).round(3)
+print(auc_knn)
+
+# 2. SVM
+from sklearn.model_selection import GridSearchCV
+from sklearn import svm
+
+# using gridsearchcv takes a very long time to run 
+param_grid = {'C': [1, 1e1, 1e2, 1e3],
+              'gamma': [0.00001, 0.0001, 0.001, 0.01 ], }
+
+param_grid = {'kernel': ('linear','rbf')}
+clf = GridSearchCV(svm.SVC(class_weight='balanced', probability=True,random_state=0), param_grid)
+clf = clf.fit(X_train, y_train)
+
+print("Best estimator found by grid search:")
+print(clf.best_estimator_)
+
+best_model_svm = clf.best_estimator_
+best_model_svm.fit(X_train, y_train)
+
+
+print("Best estimator found by grid search:")
+print(clf.best_estimator_)
+y_prob_svm= best_model_svm.predict_proba(X_val)
+y_pred_svm = (y_prob_svm[:,1]>threshold).astype(int)
+
+print(confusion_matrix(y_val, y_pred_svm))
+
+print(recall_score(y_val, y_pred_svm).round(3))
+print(precision_score(y_val, y_pred_svm).round(3))
+
+print(classification_report(y_val, y_pred_svm))
+
+auc_svm=roc_auc_score(y_val, y_prob_svm[:,1]).round(3)
+print(auc_svm)
+
+# 3. Logistic Regression, 4. L1 , 5.L2
+from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegressionCV
+
+# Logistic regression
+logit = LogisticRegression(class_weight='balanced')
+logit.fit(X_train, y_train)
+print(logit)
+
+# L-1 Regularised logistic regression
+logit_l1 = LogisticRegressionCV(penalty='l1', solver='liblinear')
+logit_l1.fit(X_train, y_train)
+print(logit_l1)
+
+# L-2 Regularised logistic regression
+logit_l2 = LogisticRegressionCV(penalty='l2', class_weight='balanced')
+logit_l2.fit(X_train, y_train)
+print(logit_l2)
+for mylogitmodel in [logit, logit_l1, logit_l2]:
+    print("=======================")
+    print(mylogitmodel)
+    print("--------------")
+    y_prob_lg = mylogitmodel.predict_proba(X_val)
+    y_pred_lg =(y_prob_lg[:,1]>0.45).astype(int)
+    print( confusion_matrix(y_val, y_pred_lg) )
+    print(classification_report(y_val, y_pred_lg))
+    auc_lg=roc_auc_score(y_val, y_prob_lg[:,1]).round(3)
+    print("auc = {}".format(auc_lg))
+    print("f1 score = {}".format(f1_score(y_val, y_pred_lg)))
+    print(y_prob_lg)
+    print(y_pred_lg)
+    print(y_val)
+  
+y_prob_l1= logit_l1.predict_proba(X_val)
+y_pred_l1= (y_prob_l1[:,1]>threshold).astype(int)
+
+print( confusion_matrix(y_val, y_pred_l1) )
+
+print(recall_score(y_val, y_pred_l1).round(3))
+print(precision_score(y_val, y_pred_l1).round(3))
+
+print(classification_report(y_val, y_pred_l1))
+
+
+y_prob_l2= logit_l2.predict_proba(X_val)
+y_pred_l2= (y_prob_l2[:,1]>threshold).astype(int)
+
+print( confusion_matrix(y_val, y_pred_l2) )
+
+print(recall_score(y_val, y_pred_l2).round(3))
+print(precision_score(y_val, y_pred_l2).round(3))
+
+print(classification_report(y_val, y_pred_l2))
+
+
+# 6. XGBoost
+import xgboost as xgb
+
+from numpy import loadtxt
+from xgboost import XGBClassifier
+clf_xgb = XGBClassifier(base_score=0.5, booster='gbtree', colsample_bylevel=1,
+              colsample_bynode=1, colsample_bytree=1, gamma=0,
+              learning_rate=1, max_delta_step=0, max_depth=7,
+              min_child_weight=1, missing=None, n_estimators=100, n_jobs=1,
+              nthread=None, objective='binary:logistic', random_state=0,
+              reg_alpha=0, reg_lambda=1, scale_pos_weight=1, seed=None,
+              silent=None, subsample=1, verbosity=1)
+
+clf_xgb.fit(X_train, y_train)
+
+
+print(clf_xgb)
+
+# make predictions for test data
+y_pred = clf_xgb.predict(X_val)
+predictions = [round(value) for value in y_pred]
+
+
+# evaluate predictions
+from sklearn.metrics import accuracy_score
+accuracy = accuracy_score(y_val, predictions)
+print("Accuracy: %.2f%%" % (accuracy * 100.0))
+
+y_prob_xgb = clf_xgb.predict_proba(X_val)
+y_pred_xgb = (y_prob_xgb[:,1:]>0.0).astype(int)
+
+print(confusion_matrix(y_val, predictions))
+print(classification_report(y_val, predictions))
+
+
+### Defining Bootstrapping function
+def model_eval(bestmodel,num_iter=10):
+
+    listf1scores = []
+    listprecision = []
+    listrecall = []
+    listaccuracy = []
+    listauc = []
+    listrownames = []
+    numiterations = 10
+
+    for i in range(numiterations):
+        listrownames.append(i)
+        X_train,X_val,y_train,y_val = train_test_split(X, y,train_size=0.8, random_state=i,stratify=y)
+        bestmodel.fit(X_train, y_train)
+        y_pred_prob = bestmodel.predict_proba(X_val)
+        y_pred =(y_pred_prob[:,1]>threshold).astype(int)
+        listf1scores.append(f1_score(y_val, y_pred).round(4))
+        listaccuracy.append(accuracy_score(y_val, y_pred).round(4))
+        listprecision.append(precision_score(y_val, y_pred).round(4))
+        listrecall.append(recall_score(y_val, y_pred).round(4))
+        listauc.append(roc_auc_score(y_val, y_pred_prob[:,1]).round(4))
+        
+        
+    listf1scores.append(np.mean(listf1scores).round(4))
+    listaccuracy.append(np.mean(listaccuracy).round(4))
+    listprecision.append(np.mean(listprecision).round(4))
+    listrecall.append(np.mean(listrecall).round(4))
+    listauc.append(np.mean(listauc).round(4))
+    listrownames.append("Average")
+    df_results = pd.DataFrame(columns=["Random state","F1 Score","Accuracy","Precision","Recall"])
+    df_results["Random state"] = listrownames # [1,2,3,4,5,6,7,8,9,10,"Average"]
+    df_results["F1 Score"] = listf1scores
+    df_results["Accuracy"] = listaccuracy
+    df_results["Precision"] = listprecision
+    df_results["Recall"] = listrecall
+    df_results["AUC"] = listauc
+    
+    return df_results
+    
+### Ranking of Important Genes according to L2 Regularised Logistic Regression
+weightvals = (np.std(X_train,0)*logit_l2.coef_)
+absweightvals = abs(weightvals)
+featurecols_final = data.iloc[:,1:].columns
+featureweightseries = pd.Series(data=absweightvals[0],index=featurecols_final)
+featureweightseries.sort_values(ascending=False, inplace=True)
+featureweightseries
+pd_index = pd.DataFrame(featureweightseries.index)
+pd_index.to_csv("index2531.csv", index=False)
+table_featureslogit= pd.DataFrame(featureweightseries)
+data[top].to_csv("dataforanalysis.csv", index=False)
+
+
+### Plotiing of ROC curves for all six models
+
+from sklearn.metrics import accuracy_score, confusion_matrix, roc_auc_score, precision_score
+
+columns=['f1_score', 'Accuracy', 'Precision', 'Recall', 'AUC']
+rows=['KNN', 'SVM',  'Logistic', 'L1 regularised','L2 regularised', 'XGB']
+results=pd.DataFrame(0.0, columns=columns, index=rows)
+
+# define a dictionary to hold all y_preds from different models
+y_preds={}
+y_preds[0]=y_pred_knn
+y_preds[1]=y_pred_svm
+y_preds[2]=y_pred_lg
+y_preds[3]=y_pred_l1
+y_preds[4]=y_pred_l2
+y_preds[5]=y_pred_xgb
+
+for i in range(len(rows)): 
+    confusion = confusion_matrix(y_val, y_preds[i])
+    results.iloc[i,0]=  f1_score(y_val, y_preds[i])
+    results.iloc[i,1]=  accuracy_score(y_val, y_preds[i])
+    results.iloc[i,2]=  precision_score(y_val, y_preds[i])
+    results.iloc[i,3]=  recall_score(y_val, y_preds[i])
+    results.iloc[i,4]=  roc_auc_score(y_val, y_preds[i])
+y_probs={}
+y_probs[0]=y_prob_knn
+y_probs[1]=y_prob_svm
+y_probs[2]=y_prob_lg
+y_probs[3]=y_prob_l1
+y_probs[4]=y_prob_l2
+y_probs[5]=y_prob_xgb
+
+palette = ['#1F77B4', '#FF7F0E', '#2CA02C', '#DB2728', '#9467BD', '#4286F4','#081326']
+auc_values = []
+from sklearn.metrics import roc_curve
+labels=['KNN', 'SVM', 'Logistic', 'L1 regularised','L2 regularised', 'XGB']
+
+fig, ax= plt.subplots(figsize=(9,6))
+
+for i in range(len(rows)):
+    fpr, tpr, _ = roc_curve(y_val, y_probs[i][:,1])
+    auc = auc_s[i]
+    ax.plot(1-fpr, tpr, label=labels[i] + ' (AUC = {:.4f})'.format(auc), color = palette[i])
+    auc_values.append(auc)
+
+ax.set_xlabel('False positive rate')
+ax.set_ylabel('True positive rate')
+ax.set_title('ROC curves', fontsize=14)
+plt.legend(fontsize=13)
+plt.show()
